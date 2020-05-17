@@ -16,6 +16,7 @@
  package com.google.firebase.example.fireeats;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -25,6 +26,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -46,6 +48,9 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.Transaction;
+
+import java.util.Objects;
 
 import me.zhanghai.android.materialratingbar.MaterialRatingBar;
 
@@ -130,6 +135,8 @@ public class RestaurantDetailActivity extends AppCompatActivity implements
         mRatingsRecycler.setAdapter(mRatingAdapter);
 
         mRatingDialog = new RatingDialogFragment();
+
+        mRestaurantRegistration = mRestaurantRef.addSnapshotListener(this);
     }
 
     @Override
@@ -165,8 +172,40 @@ public class RestaurantDetailActivity extends AppCompatActivity implements
     }
 
     private Task<Void> addRating(final DocumentReference restaurantRef, final Rating rating) {
-        // TODO(developer): Implement
-        return Tasks.forException(new Exception("not yet implemented"));
+
+        // Create reference for new rating, for use inside the transaction
+        final DocumentReference ratingRef = restaurantRef
+                .collection("ratings")
+                .document();
+
+        // In a transaction, add the new rating and update the aggregate totals
+        return mFirestore.runTransaction(new Transaction.Function<Void>() {
+            @Nullable
+            @Override
+            public Void apply(@NonNull Transaction transaction) throws FirebaseFirestoreException {
+
+                Restaurant restaurant = transaction.get(restaurantRef)
+                        .toObject(Restaurant.class);
+
+                // Compute new number of ratings
+                int newNumRatings = restaurant.getNumRatings() + 1;
+
+                // Compute average rating
+                double oldRatingTotal = restaurant.getAvgRating() * restaurant.getNumRatings();
+                double newAvgRating = (oldRatingTotal + rating.getRating() / newNumRatings);
+
+                // Set new restaurant info
+                restaurant.setNumRatings(newNumRatings);
+                restaurant.setAvgRating(newAvgRating);
+
+                // Commit to Firestore
+                transaction.set(restaurantRef, restaurant);
+                transaction.set(ratingRef, rating);
+
+                return null;
+            }
+        });
+
     }
 
     /**
@@ -178,8 +217,13 @@ public class RestaurantDetailActivity extends AppCompatActivity implements
             Log.w(TAG, "restaurant:onEvent", e);
             return;
         }
+        if (snapshot != null) {
+            Log.w(TAG, "onEvent: snapshot is available: " + snapshot.toString());
+            onRestaurantLoaded(snapshot.toObject(Restaurant.class));
+        } else {
+            Log.w(TAG, "onEvent: snapshot null");
+        }
 
-        onRestaurantLoaded(snapshot.toObject(Restaurant.class));
     }
 
     private void onRestaurantLoaded(Restaurant restaurant) {

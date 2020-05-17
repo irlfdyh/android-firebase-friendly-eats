@@ -171,7 +171,7 @@ public class MainActivity extends AppCompatActivity implements
 
     private void onAddItemsClicked() {
         // Get a reference to the restaurant collections.
-        CollectionReference restaurants = mFirestore.collection("restaurant");
+        CollectionReference restaurants = mFirestore.collection("restaurants");
 
         for (int i = 0; i < 10; i++) {
             // Get random Restaurant POJO
@@ -185,7 +185,7 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     public void onFilter(Filters filters) {
         // Construct query basic query
-        Query query = mFirestore.collection("restaurant");
+        Query query = mFirestore.collection("restaurants");
 
         // Category (equality filter)
         if (filters.hasCategory()) {
